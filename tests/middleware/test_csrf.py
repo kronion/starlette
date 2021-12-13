@@ -3,16 +3,17 @@ import pytest
 from starlette.applications import Starlette
 from starlette.middleware.csrf import (
     COOKIE_NAME,
-    CsrfMiddleware,
     HEADER_NAME,
-    SAFE_METHODS,
+    REASON_HEADER_INCORRECT,
+    REASON_INCORRECT_LENGTH,
+    REASON_INVALID_CHARACTERS,
     REASON_MISSING_COOKIE,
     REASON_MISSING_HEADER,
-    REASON_HEADER_INCORRECT,
+    SAFE_METHODS,
+    CsrfMiddleware,
 )
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
-
 
 TESTED_METHODS = {
     "GET",
@@ -94,10 +95,40 @@ def test_correct_header_succeeds(csrf_app, test_client_factory):
     token = response.cookies[COOKIE_NAME]
 
     for method in UNSAFE_METHODS:
-        response = client.request(
-            method, "/unsafe", headers={HEADER_NAME: token}
-        )
+        response = client.request(method, "/unsafe", headers={HEADER_NAME: token})
         assert response.status_code == 200
+
+
+def test_incorrect_header_length_fails(csrf_app, test_client_factory):
+    client = test_client_factory(csrf_app)
+
+    # Make an initial request to receive a CSRF cookie
+    response = client.get("/")
+    # Make a different value to submit with the wrong length
+    incorrect_token = "x" * (len(response.cookies[COOKIE_NAME]) - 1)
+
+    for method in UNSAFE_METHODS:
+        response = client.request(
+            method, "/unsafe", headers={HEADER_NAME: incorrect_token}
+        )
+        assert response.status_code == 403
+        assert response.text == REASON_INCORRECT_LENGTH
+
+
+def test_incorrect_header_charset_fails(csrf_app, test_client_factory):
+    client = test_client_factory(csrf_app)
+
+    # Make an initial request to receive a CSRF cookie
+    response = client.get("/")
+    # Make a different value to submit with non-alphanumeric characters
+    incorrect_token = "*" * len(response.cookies[COOKIE_NAME])
+
+    for method in UNSAFE_METHODS:
+        response = client.request(
+            method, "/unsafe", headers={HEADER_NAME: incorrect_token}
+        )
+        assert response.status_code == 403
+        assert response.text == REASON_INVALID_CHARACTERS
 
 
 def test_incorrect_header_fails(csrf_app, test_client_factory):
@@ -105,7 +136,7 @@ def test_incorrect_header_fails(csrf_app, test_client_factory):
 
     # Make an initial request to receive a CSRF cookie
     response = client.get("/")
-    # Make a different value to submit with the required length
+    # Make a different value to submit with the correct length
     incorrect_token = "x" * len(response.cookies[COOKIE_NAME])
 
     for method in UNSAFE_METHODS:
