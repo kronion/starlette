@@ -2,7 +2,7 @@ import re
 import secrets
 import string
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
@@ -98,7 +98,7 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         return token
 
     def _validate_token_structure(self, token: str) -> None:
-        # Confirm both tokens are of length CSRF_TOKEN_LENGTH, all VALID_CSRF_TOKEN_CHARS.
+        # Ensure both tokens have length CSRF_TOKEN_LENGTH, all VALID_CSRF_TOKEN_CHARS.
         if len(token) != CSRF_TOKEN_LENGTH:
             raise CsrfError(REASON_INCORRECT_LENGTH)
 
@@ -137,7 +137,9 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         if not self._does_token_match(cookie_token, header_token):
             raise CsrfError(REASON_HEADER_INCORRECT)
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         token = self._get_or_create_token(request)
         response = None
 
